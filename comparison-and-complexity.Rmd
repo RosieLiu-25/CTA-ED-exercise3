@@ -1,7 +1,7 @@
 ---
 title: "CTA-ED Exercise 3: Comparison and complexity"
-author: "[name here]"
-date: "2/28/2024"
+author: "Ruisi Liu"
+date: "2/12/2025"
 output: html_document
 ---
 
@@ -32,6 +32,7 @@ library(stringdist) # for basic character-based distance measures
 library(dplyr) #for wrangling data
 library(tibble) #for wrangling data
 library(ggplot2) #for visualization
+library(lubridate)
 ```
 
 
@@ -74,9 +75,8 @@ tweets_corpus
 We are now ready to reformat the data into a document feature matrix.
 
 ```{r}
-dfmat <- dfm(tokens(tweets_corpus),
-             remove_punct = TRUE, 
-             remove = stopwords("english"))
+dfmat <- dfm(tokens(tweets_corpus, remove_punct = TRUE)) %>%
+             dfm_remove(pattern = stopwords("english"))
 
 dfmat
 ```
@@ -295,6 +295,111 @@ ggplot(sum_corpus, aes(x=speaker, y=mean)) +
 
 ## Exercises
 
-1. Compute distance measures such as "euclidean" or "manhattan" for the MP tweets as above, comparing between tweets by MPs and tweets by PM, Theresa May. 
-2. Estimate at least three other complexity measures for the EU speeches as above. Consider how the results compare to the Flesch-Kincaid measure used in the article by @schoonvelde_liberals_2019.
-3. (Advanced---optional) Estimate similarity scores between the MP tweets and the PM tweets for each week contained in the data. Plot the results. 
+ 
+```{r}
+# Compute distance measures such as "euclidean" or "manhattan" for the MP tweets as above, comparing between tweets by MPs and tweets by PM, Theresa May.
+
+manhattan_dist <- dfmat %>%
+  dfm_group(groups = username) %>%
+  textstat_dist(margin = "documents", method = "manhattan")
+manhattan_mat <- as.matrix(manhattan_dist)
+rownames(manhattan_mat)
+
+tm_dist <- manhattan_mat[23, c(1:22, 24)]
+
+tm_dist_df <- as.data.frame(tm_dist)
+colnames(tm_dist_df) <- "dist_may"
+tm_dist_df <- tibble::rownames_to_column(tm_dist_df, "username")
+
+sim_method <- "manhattan"
+tm_dist_df$method <- sim_method
+
+testdf_all <- rbind(testdf_all, tm_dist_df)
+
+testdf_all <- testdf_all %>%
+  group_by(username) %>%
+  mutate(mean_dist = mean(dist_may))
+
+testdf_all <- testdf_all %>%
+  filter(method == "manhattan")
+ggplot(testdf_all) +
+  geom_point(aes(x = reorder(username, -mean_dist), y = dist_may, color = method)) + 
+  coord_flip() +
+  xlab("MP username") +
+  ylab("Distance score") + 
+  theme_minimal()
+
+```
+
+
+```{r}
+# Estimate at least three other complexity measures for the EU speeches as above. Consider how the results compare to the Flesch-Kincaid measure used in the article by @schoonvelde_liberals_2019.
+
+speeches$gunning.fog <- textstat_readability(speeches$text, measure = "FOG")
+speeches$gunning.fog <- speeches$gunning.fog$FOG
+sum_corpus_fog <- speeches %>%
+  group_by(speaker) %>%
+  summarise(mean = mean(gunning.fog, na.rm=TRUE),
+                   SD=sd(gunning.fog, na.rm=TRUE),
+                   N=length(speaker))
+sum_corpus_fog$se <- sum_corpus_fog$SD / sqrt(sum_corpus_fog$N)
+sum_corpus_fog$min <- sum_corpus_fog$mean - 1.96*sum_corpus_fog$se
+sum_corpus_fog$max <- sum_corpus_fog$mean + 1.96*sum_corpus_fog$se
+ggplot(sum_corpus_fog, aes(x=speaker, y=mean)) +
+  geom_bar(stat="identity") + 
+  geom_errorbar(ymin=sum_corpus_fog$min,ymax=sum_corpus_fog$max, width=.2) +
+  coord_flip() +
+  xlab("") +
+  ylab("Mean Complexity FOG") + 
+  theme_minimal() + 
+  ylim(c(0,20))
+
+speeches$smog <- textstat_readability(speeches$text, measure = "SMOG")
+speeches$smog <- speeches$smog$SMOG
+sum_corpus_smog <- speeches %>%
+  group_by(speaker) %>%
+  summarise(mean = mean(smog, na.rm=TRUE),
+                   SD=sd(smog, na.rm=TRUE),
+                   N=length(speaker))
+sum_corpus_smog$se <- sum_corpus_smog$SD / sqrt(sum_corpus_smog$N)
+sum_corpus_smog$min <- sum_corpus_smog$mean - 1.96*sum_corpus_smog$se
+sum_corpus_smog$max <- sum_corpus_smog$mean + 1.96*sum_corpus_smog$se
+ggplot(sum_corpus_smog, aes(x=speaker, y=mean)) +
+  geom_bar(stat="identity") + 
+  geom_errorbar(ymin=sum_corpus_smog$min,ymax=sum_corpus_smog$max, width=.2) +
+  coord_flip() +
+  xlab("") +
+  ylab("Mean Complexity SMOG") + 
+  theme_minimal() + 
+  ylim(c(0,20))
+
+speeches$drp <- textstat_readability(speeches$text, measure = "DRP")
+speeches$drp <- speeches$drp$DRP
+sum_corpus_drp <- speeches %>%
+  group_by(speaker) %>%
+  summarise(mean = mean(drp, na.rm=TRUE),
+                   SD=sd(drp, na.rm=TRUE),
+                   N=length(speaker))
+sum_corpus_drp$se <- sum_corpus_drp$SD / sqrt(sum_corpus_drp$N)
+sum_corpus_drp$min <- sum_corpus_drp$mean - 1.96*sum_corpus_drp$se
+sum_corpus_drp$max <- sum_corpus_drp$mean + 1.96*sum_corpus_drp$se
+ggplot(sum_corpus_drp, aes(x=speaker, y=mean)) +
+  geom_bar(stat="identity") + 
+  geom_errorbar(ymin=sum_corpus_drp$min,ymax=sum_corpus_drp$max, width=.2) +
+  coord_flip() +
+  xlab("") +
+  ylab("Mean Complexity DRP") + 
+  theme_minimal() + 
+  ylim(c(0,20))
+```
+
+
+```{r}
+# (Advanced---optional) Estimate similarity scores between the MP tweets and the PM tweets for each week contained in the data. Plot the results. 
+tweets_df <- as.data.frame(tweets)
+tweets_df$date <- as.Date(tweets_df$date)
+tweets_df <- tweets_df %>%
+  mutate(week = floor_date(date, "week"))
+
+```
+
